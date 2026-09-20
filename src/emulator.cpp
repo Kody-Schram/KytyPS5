@@ -5,6 +5,7 @@
 #include "common/emulatorConfig.h"
 #include "common/file.h"
 #include "common/logging/log.h"
+#include "common/path_util.h"
 #include "common/profiler.h"
 #include "common/singleton.h"
 #include "common/stringUtils.h"
@@ -82,9 +83,9 @@ static void MountSandboxDirs() {
 		title_id = "UNKNOWN";
 	}
 
-	MountOrCreateDir("_DownloadData/" + title_id, "/download0");
-	MountOrCreateDir("_TempData/" + title_id, "/temp0");
-	MountOrCreateDir("_TempData/" + title_id, "/temp");
+	MountOrCreateDir(PathUtil::GetPath(PathUtil::DOWNLOAD_DIR) / title_id, "/download0");
+	MountOrCreateDir(PathUtil::GetPath(PathUtil::TEMP_DIR) / title_id, "/temp0");
+	MountOrCreateDir(PathUtil::GetPath(PathUtil::TEMP_DIR) / title_id, "/temp");
 }
 
 static bool ClearDirectoryContents(const std::filesystem::path& dir) {
@@ -110,7 +111,7 @@ static bool ClearDirectoryContents(const std::filesystem::path& dir) {
 }
 
 static void ClearDebugTextureFolder() {
-	const std::string debug_texture_folder = "_Textures";
+	const std::string debug_texture_folder = PathUtil::GetPath(PathUtil::TEXTURE_DIR);
 
 	if (!Common::File::IsDirectoryExisting(debug_texture_folder)) {
 		Common::File::CreateDirectories(debug_texture_folder);
