@@ -1,5 +1,6 @@
 #include "path_util.h"
 
+#include <cstdlib>
 #include <filesystem>
 
 namespace PathUtil {
@@ -13,7 +14,7 @@ static constexpr auto texture_dir        = "_Textures/";
 
 static inline std::filesystem::path GetUserPath() {
 #if KYTY_PLATFORM == KYTY_PLATFORM_LINUX
-	return std::filesystem::path(std::getenv("XDG_SHARE_HOME")) / "kyty";
+	return std::filesystem::path(std::getenv("HOME")) / ".local/share/kyty";
 #endif
 	return "";
 }

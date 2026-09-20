@@ -26,7 +26,6 @@
 #include "loader/systemContent.h"
 #include "loader/timer.h"
 
-#include <cstdlib>
 #include <filesystem>
 #include <thread>
 
@@ -111,7 +110,7 @@ static bool ClearDirectoryContents(const std::filesystem::path& dir) {
 }
 
 static void ClearDebugTextureFolder() {
-	const std::string debug_texture_folder = PathUtil::GetPath(PathUtil::TEXTURE_DIR);
+	const std::filesystem::path debug_texture_folder = PathUtil::GetPath(PathUtil::TEXTURE_DIR);
 
 	if (!Common::File::IsDirectoryExisting(debug_texture_folder)) {
 		Common::File::CreateDirectories(debug_texture_folder);
