@@ -1,10 +1,10 @@
 #pragma once
 
-#include <string>
+#include <filesystem>
 
 namespace PathUtil {
 
 enum PathType { SAVE_DIR, TEMP_DIR, PIPELINE_CACHE_DIR, DOWNLOAD_DIR, TEXTURE_DIR };
 
-std::string GetPath(PathType path);
+std::filesystem::path GetPath(PathType path);
 }; // namespace PathUtil

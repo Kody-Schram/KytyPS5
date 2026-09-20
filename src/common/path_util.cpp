@@ -1,6 +1,6 @@
 #include "path_util.h"
 
-#include <stdlib.h>
+#include <filesystem>
 
 namespace PathUtil {
 
@@ -11,16 +11,16 @@ static constexpr auto pipeline_cache_dir = "_PipelineCache/";
 static constexpr auto download_dir       = "_DownloadData/";
 static constexpr auto texture_dir        = "_Textures/";
 
-inline std::string GetUserPath() {
+static inline std::filesystem::path GetUserPath() {
 #if KYTY_PLATFORM == KYTY_PLATFORM_LINUX
-	return std::getenv("HOME") + std::string(".local/share/kyty/");
+	return std::filesystem::path(std::getenv("XDG_SHARE_HOME")) / "kyty";
 #endif
 	return "";
 }
 
-std::string GetPath(PathType path) {
+std::filesystem::path GetPath(PathType path) {
 	switch (path) {
-		case SAVE_DIR: return GetUserPath() + save_dir;
+		case SAVE_DIR: return GetUserPath() / save_dir;
 
 		case TEMP_DIR:
 #if KYTY_PLATFORM == KYTY_PLATFORM_LINUX
@@ -28,11 +28,11 @@ std::string GetPath(PathType path) {
 #endif
 			return temp_dir;
 
-		case PIPELINE_CACHE_DIR: return GetUserPath() + pipeline_cache_dir;
+		case PIPELINE_CACHE_DIR: return GetUserPath() / pipeline_cache_dir;
 
-		case DOWNLOAD_DIR: return GetUserPath() + download_dir;
+		case DOWNLOAD_DIR: return GetUserPath() / download_dir;
 
-		case TEXTURE_DIR: return GetUserPath() + texture_dir;
+		case TEXTURE_DIR: return GetUserPath() / texture_dir;
 	}
 }
 
