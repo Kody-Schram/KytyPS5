@@ -119,7 +119,7 @@ static void ClearDebugTextureFolder() {
 
 	if (!ClearDirectoryContents(debug_texture_folder)) {
 		LOGF_COLOR(Log::Color::BrightYellow, "TextureDump: failed to completely clear %s\n",
-		           debug_texture_folder.c_str());
+		           debug_texture_folder.string().c_str());
 	}
 }
 
