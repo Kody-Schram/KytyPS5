@@ -14,7 +14,10 @@ static constexpr auto texture_dir        = "_Textures/";
 
 static inline std::filesystem::path GetUserPath() {
 #if KYTY_PLATFORM == KYTY_PLATFORM_LINUX
-	return std::filesystem::path(std::getenv("HOME")) / ".local/share/kyty";
+	static char const* usr_dir = std::getenv("HOME");
+	if (usr_dir == nullptr) return "";
+
+	return std::filesystem::path(usr_dir) / ".local/share/kyty";
 #endif
 	return "";
 }
