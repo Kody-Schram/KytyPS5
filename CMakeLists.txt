@@ -750,6 +750,11 @@ if(LINUX)
     target_link_options(kyty_emulator PRIVATE
         $<$<CONFIG:Release>:-Wl,--strip-all>
     )
+if(TARGET launcher)
+        target_link_options(launcher PRIVATE
+            $<$<CONFIG:Release>:-Wl,--strip-all>
+        )
+    endif()
 endif()
 
 if(APPLE)
