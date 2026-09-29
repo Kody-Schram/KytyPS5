@@ -1,3 +1,4 @@
+#include "common/archive.h"
 #include "common/common.h"
 #include "common/dateTime.h"
 #include "common/debug.h"
@@ -10,6 +11,7 @@
 
 #include <charconv>
 #include <cstdio>
+#include <filesystem>
 #include <string_view>
 #include <vector>
 #include <fmt/format.h>
@@ -40,9 +42,9 @@ static std::string GetBuildString() {
 
 static void PrintUsage() {
 	::printf("%s\n", GetBuildString().c_str());
-	::printf("kyty_emulator --game <dir|elf> [options]\n\n");
+	::printf("kyty_emulator --game <dir|elf|zar> [options]\n\n");
 	::printf("Options:\n");
-	::printf("  --game <dir|elf>                     Game directory or ELF to load.\n");
+	::printf("  --game <dir|elf|zar>                 Game directory, ELF, or ZArchive to load.\n");
 	::printf("  --game-patch <json>                  ETAHen cheat file.\n");
 	::printf("  --screen-width <num>                 Window width. Default: 1280.\n");
 	::printf("  --screen-height <num>                Window height. Default: 720.\n");
@@ -133,6 +135,26 @@ static bool ParseConsoleLanguage(const std::string& value, uint32_t& out) {
 	return true;
 }
 
+static bool ParseUint32(const std::string& value, uint32_t& out) {
+	uint32_t number   = 0;
+	auto [end, error] = std::from_chars(value.data(), value.data() + value.size(), number);
+	if (error != std::errc {} || end != value.data() + value.size()) {
+		return false;
+	}
+	out = number;
+	return true;
+}
+
+static bool ParseInt32(const std::string& value, int32_t& out) {
+	int32_t number    = 0;
+	auto [end, error] = std::from_chars(value.data(), value.data() + value.size(), number);
+	if (error != std::errc {} || end != value.data() + value.size()) {
+		return false;
+	}
+	out = number;
+	return true;
+}
+
 static bool ParseUserId(const std::string& value, int32_t& out) {
 	int32_t user_id   = 0;
 	auto [end, error] = std::from_chars(value.data(), value.data() + value.size(), user_id);
@@ -214,11 +236,19 @@ static bool ParseArgs(int argc, char* argv[], RunOptions& options, bool& show_he
 				return false;
 			}
 
-			value = Common::FixFilenameSlash(value);
+			value           = Common::FixFilenameSlash(value);
 			const auto path = Common::PathFromUtf8(value);
 
 			if (Common::File::IsDirectoryExisting(path)) {
 				options.app0_dir = path;
+				options.elf      = "/app0/eboot.bin";
+			} else if (Common::IsSupportedArchive(path) && Common::File::IsFileExisting(path)) {
+				const auto root = Common::MakeArchivePath(path);
+				if (!Common::File::IsFileExisting(root / "eboot.bin")) {
+					::printf("Archive does not contain eboot.bin: %s\n", value.c_str());
+					return false;
+				}
+				options.app0_dir = root;
 				options.elf      = "/app0/eboot.bin";
 			} else if (Common::File::IsFileExisting(path)) {
 				options.app0_dir = path.parent_path();
@@ -229,7 +259,8 @@ static bool ParseArgs(int argc, char* argv[], RunOptions& options, bool& show_he
 
 				options.elf = std::filesystem::path("/app0") / path.filename();
 			} else {
-				::printf("--game must point to an existing directory or ELF: %s\n", value.c_str());
+				::printf("--game must point to an existing directory, ELF, or archive: %s\n",
+				         value.c_str());
 				return false;
 			}
 		} else if (arg == "--game-patch") {
@@ -246,9 +277,17 @@ static bool ParseArgs(int argc, char* argv[], RunOptions& options, bool& show_he
 			}
 			options.game_patch = path;
 		} else if (arg == "--screen-width") {
-			options.config.screen_width = static_cast<uint32_t>(Common::ToInt32(value));
+			if (!ParseUint32(value, options.config.screen_width) ||
+			    options.config.screen_width == 0) {
+				::printf("invalid screen width: %s\n", value.c_str());
+				return false;
+			}
 		} else if (arg == "--screen-height") {
-			options.config.screen_height = static_cast<uint32_t>(Common::ToInt32(value));
+			if (!ParseUint32(value, options.config.screen_height) ||
+			    options.config.screen_height == 0) {
+				::printf("invalid screen height: %s\n", value.c_str());
+				return false;
+			}
 		} else if (arg == "--user-name") {
 			if (value.empty() || value.size() > Config::MAX_USER_NAME_LENGTH) {
 				::printf("invalid user name: must contain 1-%zu bytes\n",
@@ -269,11 +308,15 @@ static bool ParseArgs(int argc, char* argv[], RunOptions& options, bool& show_he
 				return false;
 			}
 		} else if (arg == "--gpu") {
-			options.config.gpu_index = Common::ToInt32(value);
+			if (!ParseInt32(value, options.config.gpu_index)) {
+				::printf("invalid gpu index: %s\n", value.c_str());
+				return false;
+			}
 		} else if (arg == "--vblank-frequency") {
-			const int32_t vblank_frequency = Common::ToInt32(value);
-			options.config.vblank_frequency =
-			    static_cast<uint32_t>(vblank_frequency < 0 ? 0 : vblank_frequency);
+			if (!ParseUint32(value, options.config.vblank_frequency)) {
+				::printf("invalid vblank frequency: %s\n", value.c_str());
+				return false;
+			}
 		} else if (arg == "--console-language") {
 			if (!ParseConsoleLanguage(value, options.config.console_language)) {
 				::printf("invalid console language: %s\n", value.c_str());

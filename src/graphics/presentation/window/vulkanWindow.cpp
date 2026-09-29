@@ -238,6 +238,10 @@ static void VulkanFindPhysicalDevice(vk::Instance instance, vk::SurfaceKHR surfa
 #endif
 		}
 #if !defined(__APPLE__)
+		if (device_features2.features.depthClamp != VK_TRUE) {
+			LOGF("depthClamp is not supported\n");
+			skip_device = true;
+		}
 		if (fragment_barycentric.fragmentShaderBarycentric != VK_TRUE) {
 			LOGF("fragmentShaderBarycentric is not supported\n");
 			skip_device = true;
@@ -516,16 +520,20 @@ static vk::Device VulkanCreateDevice(GraphicContext& graphics,
 #endif
 	depth_clip_control.depthClipControl = VK_TRUE;
 
-	auto features12  = WindowContext::RequiredVulkan12Features();
-	features12.pNext = &depth_clip_control;
-
+	const bool workgroup_layout_extension =
+	    HasExtension(device_extensions, VK_KHR_WORKGROUP_MEMORY_EXPLICIT_LAYOUT_EXTENSION_NAME);
+	vk::PhysicalDeviceWorkgroupMemoryExplicitLayoutFeaturesKHR supported_workgroup_layout {};
+	vk::PhysicalDeviceVulkan12Features supported_features12 {};
+	supported_features12.pNext = workgroup_layout_extension ? &supported_workgroup_layout : nullptr;
 	vk::PhysicalDeviceVulkan13Features supported_features13 {};
+	supported_features13.pNext = &supported_features12;
 
 	const auto robustness2_ext_enabled =
 	    HasExtension(device_extensions, VK_EXT_ROBUSTNESS_2_EXTENSION_NAME);
 
 	vk::PhysicalDeviceRobustness2FeaturesEXT supported_robustness2 {};
 	if (robustness2_ext_enabled) {
+		supported_robustness2.pNext = supported_features13.pNext;
 		supported_features13.pNext = &supported_robustness2;
 	}
 
@@ -553,6 +561,22 @@ static vk::Device VulkanCreateDevice(GraphicContext& graphics,
 		supported_features2.pNext = &provoking_vertex;
 	}
 	physical_device.getFeatures2(&supported_features2);
+
+	auto features12 = WindowContext::RequiredVulkan12Features();
+	features12.shaderSharedInt64Atomics = supported_features12.shaderSharedInt64Atomics;
+	vk::PhysicalDeviceWorkgroupMemoryExplicitLayoutFeaturesKHR workgroup_layout {};
+	workgroup_layout.workgroupMemoryExplicitLayout =
+	    supported_workgroup_layout.workgroupMemoryExplicitLayout;
+	workgroup_layout.pNext = &depth_clip_control;
+	features12.pNext = workgroup_layout_extension ? static_cast<void*>(&workgroup_layout)
+	                                             : static_cast<void*>(&depth_clip_control);
+	if (!features12.shaderSharedInt64Atomics || !workgroup_layout.workgroupMemoryExplicitLayout) {
+		Log::WriteToConsoleAndLog(fmt::format(
+		    "WARNING: Native 64-bit LDS atomics are unavailable: shaderSharedInt64Atomics={}, "
+		    "workgroupMemoryExplicitLayout={}. Continuing with the selected Vulkan device.\n",
+		    features12.shaderSharedInt64Atomics != VK_FALSE,
+		    workgroup_layout.workgroupMemoryExplicitLayout != VK_FALSE));
+	}
 	graphics.mesh_shader_enabled = mesh_extension && supported_mesh.meshShader;
 
 	vk::PhysicalDeviceSubgroupSizeControlProperties subgroup_size_control {};
@@ -560,8 +584,10 @@ static vk::Device VulkanCreateDevice(GraphicContext& graphics,
 	vk::PhysicalDeviceVulkan11Properties properties11 {};
 	properties11.pNext = &subgroup_size_control;
 
+	vk::PhysicalDeviceFloatControlsProperties float_controls {};
+	float_controls.pNext = &properties11;
 	vk::PhysicalDeviceProperties2 properties2 {};
-	properties2.pNext = &properties11;
+	properties2.pNext = &float_controls;
 
 	if (graphics.mesh_shader_enabled) {
 		subgroup_size_control.pNext = &graphics.mesh_shader_properties;
@@ -607,6 +633,7 @@ static vk::Device VulkanCreateDevice(GraphicContext& graphics,
 	device_features.robustBufferAccess       = VK_TRUE;
 #if !defined(__APPLE__)
 	device_features.depthBounds = VK_TRUE; // unsupported by MoltenVK
+	device_features.depthClamp  = VK_TRUE;
 #endif
 	device_features.shaderStorageImageWriteWithoutFormat = VK_TRUE;
 	device_features.shaderImageGatherExtended            = VK_TRUE;
@@ -623,6 +650,15 @@ static vk::Device VulkanCreateDevice(GraphicContext& graphics,
 	device_features.vertexPipelineStoresAndAtomics       = VK_TRUE;
 	graphics.sample_rate_shading_enabled                 = true;
 	device_features.shaderInt64 = VK_TRUE;
+	device_features.shaderFloat64 =
+	    supported_features2.features.shaderFloat64 &&
+	    float_controls.shaderSignedZeroInfNanPreserveFloat64 &&
+	    float_controls.shaderRoundingModeRTEFloat32;
+	// if (device_features.shaderFloat64 && !float_controls.shaderDenormPreserveFloat64) {
+	// 	Log::WriteToConsoleAndLog(
+	// 	    "WARNING: Vulkan device does not guarantee FP64 denormal preservation; "
+	// 	    "continuing with native FP64 arithmetic. Very small values may be flushed to zero.\n");
+	// }
 
 	vk::PhysicalDeviceRobustness2FeaturesEXT robustness2 {};
 #if defined(__APPLE__)
@@ -1033,6 +1069,7 @@ void WindowContext::CreateVulkan() {
 		for (const auto* extension: {VK_EXT_ROBUSTNESS_2_EXTENSION_NAME,
 		                             VK_EXT_PROVOKING_VERTEX_EXTENSION_NAME,
 		                             VK_EXT_MESH_SHADER_EXTENSION_NAME,
+		                             VK_KHR_WORKGROUP_MEMORY_EXPLICIT_LAYOUT_EXTENSION_NAME,
 		                             VK_EXT_DEPTH_RANGE_UNRESTRICTED_EXTENSION_NAME}) {
 			if (HasExtension(available_extensions, extension)) {
 				device_extensions.push_back(extension);

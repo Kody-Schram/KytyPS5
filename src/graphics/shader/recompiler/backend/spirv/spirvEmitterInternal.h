@@ -67,6 +67,9 @@ struct SpirvRequirements {
 	bool function_scratch             = false;
 	bool pixel_valid_mask             = false;
 	bool buffer_int64_atomics         = false;
+	bool shared_int64_atomics         = false;
+	bool coherent_buffers             = false;
+	bool float64                      = false;
 };
 
 SpirvRequirements AnalyzeProgramRequirements(const IR::Program& program);
@@ -99,6 +102,7 @@ struct EmitterState {
 	uint32_t                                         shader_data_storage_variable = 0;
 	uint32_t                                         flattened_srt_variable  = 0;
 	uint32_t                                         lds_variable            = 0;
+	uint32_t                                         lds_u64_variable        = 0;
 	std::array<uint32_t, 2>                          scratch_variable {};
 	std::array<uint32_t, IR::ImageBindingCount>      image_variables {};
 	uint32_t                   sampler_variable                      = 0;
@@ -138,6 +142,7 @@ uint32_t TypeU32Pair(EmitterState& state);
 uint32_t TypeI32(EmitterState& state);
 uint32_t TypeI32Pair(EmitterState& state);
 uint32_t TypeF32(EmitterState& state);
+uint32_t TypeF64(EmitterState& state);
 uint32_t TypeU32Vector(EmitterState& state, uint32_t components);
 
 uint32_t TypeU32Composite(EmitterState& state, uint32_t components);
@@ -166,6 +171,10 @@ template <spv::Op opcode, IR::Type type, typename... Args>
 uint32_t EmitNative(EmitterState& state, Args... args) {
 	const auto result = state.builder.AllocateId();
 	state.builder.AddFunction(opcode, TypeId(state, type), result, args...);
+	if constexpr (type == IR::Type::F64 &&
+	              (opcode == spv::OpFMul || opcode == spv::OpFDiv || opcode == spv::OpExtInst)) {
+		state.builder.AddAnnotation(spv::OpDecorate, result, spv::DecorationNoContraction);
+	}
 	return result;
 }
 
@@ -369,14 +378,16 @@ Prospero::BufferFormat StorageBufferFormat(const EmitterState& state, const IR::
 void EmitMemoryOffsets(EmitterState& state);
 
 uint32_t LdsDwordCount(const EmitterState& state);
+void EnsureLdsStorage(EmitterState& state);
 
 struct MemoryResourceAccess {
-	IR::ResourceKind kind             = IR::ResourceKind::None;
-	uint32_t         object_pointer   = 0;
-	uint32_t         length           = 0;
-	uint32_t         index_offset     = 0;
-	uint32_t         byte_offset      = 0;
-	bool             add_index_offset = false;
+	IR::ResourceKind      kind             = IR::ResourceKind::None;
+	uint32_t              object_pointer   = 0;
+	uint32_t              length           = 0;
+	uint32_t              index_offset     = 0;
+	uint32_t              byte_offset      = 0;
+	bool                  add_index_offset = false;
+	spv::MemoryAccessMask memory_access    = spv::MemoryAccessMaskNone;
 };
 
 MemoryResourceAccess PrepareMemoryResourceAccess(EmitterState& state, const IR::MemoryInfo& mem);
