@@ -14,6 +14,9 @@ static constexpr auto texture_dir        = "_Textures/";
 
 static inline std::filesystem::path GetUserPath() {
 #if KYTY_PLATFORM == KYTY_PLATFORM_LINUX
+	static char const* data_home = std::getenv("XDG_DATA_HOME");
+	if (data_home != nullptr) return data_home;
+
 	static char const* usr_dir = std::getenv("HOME");
 	if (usr_dir == nullptr) return "";
 
@@ -28,7 +31,7 @@ std::filesystem::path GetPath(PathType path) {
 
 		case TEMP_DIR:
 #if KYTY_PLATFORM == KYTY_PLATFORM_LINUX
-			return "/tmp/kyty/";
+			return "/tmp/kyty";
 #endif
 			return temp_dir;
 
